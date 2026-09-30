@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+/* Tailwind's dark variant follows prefers-color-scheme automatically. */
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+  background: white;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    background: black;
+  }
+}
+
+body {
+  margin: 0;
+  min-width: 240px;
+}
