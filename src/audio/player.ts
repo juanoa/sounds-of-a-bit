@@ -12,6 +12,7 @@ export function createLofiPlayer(
 ) {
   let context: AudioContext | null = null;
   let master: GainNode | null = null;
+  let analyser: AnalyserNode | null = null;
   let composition: ReturnType<typeof createComposition> | null = null;
   let scheduler: ReturnType<typeof setInterval> | null = null;
   let nextBar = 0;
@@ -72,6 +73,7 @@ export function createLofiPlayer(
     }
     context = null;
     master = null;
+    analyser = null;
     composition = null;
     initialized = false;
     nextBar = 0;
@@ -86,7 +88,9 @@ export function createLofiPlayer(
     context = audio;
     master = audio.createGain();
     master.gain.value = 0;
-    master.connect(audio.destination);
+    analyser = audio.createAnalyser();
+    analyser.fftSize = 2048;
+    master.connect(analyser).connect(audio.destination);
 
     const warmth = audio.createBiquadFilter();
     warmth.type = "lowpass";
@@ -127,6 +131,9 @@ export function createLofiPlayer(
   }
 
   return {
+    getAnalyser() {
+      return analyser;
+    },
     // This method also handles autoplay. A blocked resume promise can remain
     // pending until a gesture, so it must never disable the play button.
     play() {

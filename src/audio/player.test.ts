@@ -58,6 +58,9 @@ class MockAudioContext {
       (this.state === "running" ? (Date.now() - this.epoch) / 1000 : 0)
     );
   }
+  createAnalyser() {
+    return new MockNode();
+  }
   createGain() {
     return new MockNode();
   }

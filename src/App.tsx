@@ -1,12 +1,18 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { PauseIcon, PlayIcon } from "@phosphor-icons/react";
 import { createLofiPlayer } from "./audio/player";
 import type { PlaybackState } from "./audio/player";
+import { Waveform } from "./components/Waveform";
 
 type Player = ReturnType<typeof createLofiPlayer>;
 
 export default function App() {
   const player = useRef<Player | null>(null);
   const [state, setState] = useState<PlaybackState>("paused");
+  const getAnalyser = useCallback(
+    () => player.current?.getAnalyser() ?? null,
+    [],
+  );
 
   useEffect(() => {
     const audio = createLofiPlayer((next) => {
@@ -32,33 +38,49 @@ export default function App() {
           : "Music paused";
 
   return (
-    <main className="grid min-h-dvh place-items-center bg-white text-black dark:bg-black dark:text-white">
-      <button
-        type="button"
-        onClick={() =>
-          playing ? player.current?.pause() : player.current?.play()
-        }
-        aria-label={label}
-        title={state === "blocked" || state === "error" ? status : label}
-        className="grid size-20 cursor-pointer place-items-center rounded-full hover:bg-black/5 focus-visible:outline-2 focus-visible:outline-offset-8 focus-visible:outline-current dark:hover:bg-white/10"
+    <main className="relative flex min-h-dvh items-center justify-center bg-white p-6 text-neutral-900 sm:p-10 dark:bg-black dark:text-white">
+      <section
+        aria-label="Lo-fi player"
+        className="max-w-[min(360px,calc(50svh-90px))] flex flex-col items-start bg-neutral-100 p-6 rounded-md shadow-md gap-6"
       >
-        <svg
-          width="32"
-          height="32"
-          viewBox="0 0 24 24"
-          fill="currentColor"
-          aria-hidden="true"
-        >
-          {playing ? (
-            <path d="M6 4h4v16H6zM14 4h4v16h-4z" />
-          ) : (
-            <path d="M7 3.5a1 1 0 0 1 1.5-.86l13 8.5a1 1 0 0 1 0 1.72l-13 8.5A1 1 0 0 1 7 20.5z" />
-          )}
-        </svg>
-      </button>
-      <span role="status" className="sr-only">
-        {status}
-      </span>
+        <h1 className="sr-only">Sounds of a Bit</h1>
+        <img
+          src="/sounds-of-a-bit.webp"
+          alt="A pink iridescent Sounds of a Bit disc"
+          width="300"
+          height="300"
+          draggable={false}
+          className="block aspect-square select-none animate-spin [animation-duration:10s] motion-reduce:animate-none self-center"
+          style={{ animationPlayState: playing ? "running" : "paused" }}
+        />
+        <div className="flex flex-col gap-0.5">
+          <h2 className="text-lg font-extrabold">The beginning of sth</h2>
+          <p className="text-xs">Nothing was recorded</p>
+        </div>
+        <div className="flex items-center gap-2.5 sm:mb-4 sm:gap-3.5 w-full">
+          <button
+            type="button"
+            onClick={() =>
+              playing ? player.current?.pause() : player.current?.play()
+            }
+            aria-label={label}
+            className="cursor-pointer"
+          >
+            {playing ? (
+              <PauseIcon size={24} aria-hidden="true" />
+            ) : (
+              <PlayIcon size={24} aria-hidden="true" />
+            )}
+          </button>
+          <Waveform playing={playing} getAnalyser={getAnalyser} />
+        </div>
+        <span role="status" className="sr-only">
+          {status}
+        </span>
+      </section>
+      <footer className="absolute inset-x-4 bottom-4 text-left text-xs text-neutral-500 dark:text-neutral-400">
+        This sound is generated using the browser. No audio files downloaded.
+      </footer>
     </main>
   );
 }

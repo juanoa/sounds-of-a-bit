@@ -1,9 +1,14 @@
 @import "tailwindcss";
 
+@theme {
+  --font-sans: "IBM Plex Mono", ui-monospace, monospace;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
 /* Tailwind's dark variant follows prefers-color-scheme automatically. */
 :root {
   color-scheme: light dark;
-  font-family: system-ui, sans-serif;
+  font-family: var(--font-mono);
   background: white;
 }
 
