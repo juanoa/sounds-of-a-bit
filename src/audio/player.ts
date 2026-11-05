@@ -1,4 +1,6 @@
 import { createComposition, createNoiseBuffer } from "./composition";
+import { TRACKS } from "./tracks";
+import type { Track } from "./tracks";
 
 export type PlaybackState = "playing" | "paused" | "blocked" | "error";
 
@@ -9,7 +11,9 @@ const SCHEDULER_INTERVAL_MS = 1000;
 
 export function createLofiPlayer(
   onStateChange: (state: PlaybackState) => void,
+  initialTrack: Track = TRACKS[0],
 ) {
+  let track = initialTrack;
   let context: AudioContext | null = null;
   let master: GainNode | null = null;
   let analyser: AnalyserNode | null = null;
@@ -68,6 +72,10 @@ export function createLofiPlayer(
   function releaseContext() {
     clearScheduler();
     if (context) {
+      if (master) {
+        master.gain.cancelScheduledValues(context.currentTime);
+        master.gain.setValueAtTime(0, context.currentTime);
+      }
       context.onstatechange = null;
       void context.close().catch(() => {});
     }
@@ -97,7 +105,7 @@ export function createLofiPlayer(
     warmth.Q.value = 0.4;
     warmth.frequency.value = 3400;
     warmth.connect(master);
-    composition = createComposition(audio, warmth);
+    composition = createComposition(audio, warmth, track);
 
     const texture = audio.createBufferSource();
     texture.buffer = createNoiseBuffer(audio, 3, 17);
@@ -114,7 +122,11 @@ export function createLofiPlayer(
       if (disposed || context !== audio) return;
       if (audio.state === "running") {
         if (wantsPlayback) startWhenAllowed();
-        else void audio.suspend().catch(handleError);
+        else {
+          void audio.suspend().catch(() => {
+            if (context === audio) handleError();
+          });
+        }
       } else {
         clearScheduler();
         onStateChange(wantsPlayback ? "blocked" : "paused");
@@ -130,27 +142,37 @@ export function createLofiPlayer(
     onStateChange("error");
   }
 
+  // A blocked resume promise can remain pending until a gesture, so it must
+  // never disable play or affect a different track selected in the meantime.
+  function play() {
+    if (disposed) return;
+    wantsPlayback = true;
+    try {
+      const audio = initialize();
+      startWhenAllowed();
+      void audio
+        .resume()
+        .then(() => {
+          if (context === audio) startWhenAllowed();
+        })
+        .catch(() => {
+          if (context === audio) handleError();
+        });
+    } catch {
+      handleError();
+    }
+  }
+
   return {
     getAnalyser() {
       return analyser;
     },
-    // This method also handles autoplay. A blocked resume promise can remain
-    // pending until a gesture, so it must never disable the play button.
-    play() {
-      if (disposed) return;
-      wantsPlayback = true;
-      try {
-        const audio = initialize();
-        startWhenAllowed();
-        void audio
-          .resume()
-          .then(() => {
-            if (context === audio) startWhenAllowed();
-          })
-          .catch(handleError);
-      } catch {
-        handleError();
-      }
+    play,
+    selectTrack(nextTrack: Track) {
+      if (disposed || nextTrack.id === track.id) return;
+      track = nextTrack;
+      releaseContext();
+      if (wantsPlayback) play();
     },
     pause() {
       if (!context || !master || disposed) return;
@@ -159,7 +181,10 @@ export function createLofiPlayer(
       master.gain.cancelScheduledValues(context.currentTime);
       master.gain.setValueAtTime(0, context.currentTime);
       onStateChange("paused");
-      void context.suspend().catch(handleError);
+      const audio = context;
+      void audio.suspend().catch(() => {
+        if (context === audio) handleError();
+      });
       // Suspended audio time preserves scheduled notes and effect tails.
     },
     dispose() {

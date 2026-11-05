@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createLofiPlayer } from "./player";
 import type { PlaybackState } from "./player";
+import { TRACKS } from "./tracks";
 
 class MockParam {
   value = 0;
@@ -131,12 +132,83 @@ beforeEach(() => {
   );
 });
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.clearAllTimers();
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
 describe("instant lo-fi playback", () => {
+  it.each(TRACKS)("plays the score and tempo of $title", (track) => {
+    const player = createLofiPlayer(() => {}, track);
+    player.play();
+    const audio = MockAudioContext.instances[0];
+    const bass = audio.oscillators.find((node) => node.starts[0] === 0.015);
+    expect(bass?.frequency.value).toBeCloseTo(440 * 2 ** ((track.roots[0] - 69) / 12));
+    const initialVoices = audio.oscillators.length;
+    vi.advanceTimersByTime(1000);
+    expect(audio.oscillators[initialVoices].starts[0]).toBeCloseTo(0.025 + 4 * 60 / track.tempo);
+    vi.advanceTimersByTime(60000);
+    expect(Math.max(...audio.oscillators.flatMap((node) => node.starts))).toBeGreaterThan(70);
+    player.dispose();
+  });
+
+  it("replaces playing tracks immediately and clears the previous queue", () => {
+    const states: PlaybackState[] = [];
+    const player = createLofiPlayer((state) => states.push(state));
+    player.play();
+    vi.advanceTimersByTime(2000);
+    const previous = MockAudioContext.instances[0];
+    const previousVoiceCount = previous.oscillators.length;
+    player.selectTrack(TRACKS[1]);
+    expect(previous.state).toBe("closed");
+    expect(states.at(-1)).toBe("playing");
+    const current = MockAudioContext.instances[1];
+    expect(Math.min(...current.oscillators.flatMap((node) => node.starts))).toBeCloseTo(0.015);
+    expect(vi.getTimerCount()).toBe(1);
+    vi.advanceTimersByTime(3000);
+    expect(previous.oscillators).toHaveLength(previousVoiceCount);
+    player.dispose();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("keeps track changes paused until play is pressed", () => {
+    const states: PlaybackState[] = [];
+    const player = createLofiPlayer((state) => states.push(state));
+    player.play();
+    player.pause();
+    player.selectTrack(TRACKS[1]);
+    player.selectTrack(TRACKS[2]);
+    expect(states.at(-1)).toBe("paused");
+    expect(MockAudioContext.instances).toHaveLength(1);
+    expect(vi.getTimerCount()).toBe(0);
+    player.play();
+    const audio = MockAudioContext.instances[1];
+    const bass = audio.oscillators.find((node) => node.starts[0] === 0.015);
+    expect(bass?.frequency.value).toBeCloseTo(440 * 2 ** ((TRACKS[2].roots[0] - 69) / 12));
+    expect(states.at(-1)).toBe("playing");
+    player.dispose();
+  });
+
+  it("ignores a stale autoplay rejection after changing tracks", async () => {
+    MockAudioContext.autoplayAllowed = false;
+    let rejectResume!: (reason: Error) => void;
+    vi.spyOn(MockAudioContext.prototype, "resume").mockImplementationOnce(
+      () => new Promise<void>((_, reject) => { rejectResume = reject; }),
+    );
+    const states: PlaybackState[] = [];
+    const player = createLofiPlayer((state) => states.push(state));
+    player.play();
+    MockAudioContext.autoplayAllowed = true;
+    player.selectTrack(TRACKS[1]);
+    rejectResume(new Error("Old context closed"));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(states.at(-1)).toBe("playing");
+    expect(MockAudioContext.instances[1].state).toBe("running");
+    player.dispose();
+  });
+
   it("leaves blocked autoplay retryable while resume is pending", async () => {
     MockAudioContext.autoplayAllowed = false;
     const states: PlaybackState[] = [];

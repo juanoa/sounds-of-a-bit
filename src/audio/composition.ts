@@ -1,6 +1,7 @@
-// The original eight-bar composition from the browser prototype.
+import { TRACKS } from "./tracks";
+import type { Track } from "./tracks";
+
 // Schedule notes directly on the audio clock; no song-length render is needed.
-export const TEMPO = 78;
 const hz = (note: number): number => 440 * 2 ** ((note - 69) / 12);
 
 export function createNoiseBuffer(
@@ -21,8 +22,12 @@ export function createNoiseBuffer(
   }
   return b;
 }
-export function createComposition(ac: AudioContext, output: AudioNode) {
-  const beat = 60 / TEMPO;
+export function createComposition(
+  ac: AudioContext,
+  output: AudioNode,
+  track: Track = TRACKS[0],
+) {
+  const beat = 60 / track.tempo;
   const sr = ac.sampleRate;
   const mix = ac.createGain();
   mix.gain.value = 0.72;
@@ -140,38 +145,7 @@ export function createComposition(ac: AudioContext, output: AudioNode) {
     s.start(t, hat ? 0.25 : 0);
     s.stop(t + 0.22);
   }
-  const chords = [
-      [57, 60, 64, 67, 71],
-      [53, 57, 60, 64, 69],
-      [55, 59, 60, 64, 74],
-      [55, 59, 62, 64, 69],
-    ],
-    roots = [33, 29, 36, 31];
-  const melodies = [
-    [
-      [0.5, 76],
-      [2.75, 71],
-    ],
-    [[1.5, 72]],
-    [
-      [0.75, 69],
-      [3, 72],
-    ],
-    [[2.5, 76]],
-    [
-      [0.5, 74],
-      [2, 71],
-    ],
-    [[1.5, 67]],
-    [
-      [0.75, 69],
-      [2.75, 71],
-    ],
-    [
-      [1.5, 67],
-      [3, 64],
-    ],
-  ];
+  const { chords, roots, melodies } = track;
   return {
     barDuration: 4 * beat,
     scheduleBar(bar: number, t: number) {
@@ -188,12 +162,19 @@ export function createComposition(ac: AudioContext, output: AudioNode) {
       percussion(t + beat * 3 + 0.023);
       for (let h = 0; h < 8; h++)
         percussion(
-          t + beat * (h * 0.5 + (h % 2 ? 0.075 : 0)),
+          t + beat * (h * 0.5 + (h % 2 ? track.swing : 0)),
           true,
           h % 2 ? 0.66 : 0.9,
         );
       melodies[bar].forEach(([offset, n]) =>
-        tone(n, t + offset * beat + 0.012, beat * 1.1, 0.026, "triangle", -0.2),
+        tone(
+          n,
+          t + offset * beat + 0.012,
+          beat * 1.1,
+          0.026,
+          track.melodyVoice,
+          -0.2,
+        ),
       );
     },
   };
